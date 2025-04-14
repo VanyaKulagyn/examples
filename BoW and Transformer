@@ -1,0 +1,419 @@
+# Задание 1 
+
+import os, pathlib, shutil, random
+base_dir = pathlib.Path("aclImdb")
+val_dir = base_dir / "val"
+train_dir = base_dir / "train"
+for category in ("neg", "pos"):
+	os.makedirs(val_dir / category)
+	files = os.listdir(train_dir / category)
+	random.Random(1337).shuffle(files)
+	num_val_samples = int(0.2 * len(files))
+	val_files = files[-num_val_samples:]
+	for name in val_files:
+		shutil.move(train_dir / category / name, val_dir / category / name)
+
+from tensorflow import keras
+batch_size = 32
+train_ds = keras.utils.text_dataset_from_directory(
+	"aclImdb/train", batch_size=batch_size
+)
+val_ds = keras.utils.text_dataset_from_directory(
+	"aclImdb/val", batch_size=batch_size
+)
+test_ds = keras.utils.text_dataset_from_directory(
+	"aclImdb/test", batch_size=batch_size
+)
+
+for inputs, targets in train_ds:
+	print("inputs.shape:", inputs.shape)
+	print("inputs.dtype:", inputs.dtype)
+	print("targets.shape:", targets.shape)
+	print("targets.dtype:", targets.dtype)
+	print("targets[0]:", targets[0])
+	break
+
+from tensorflow import keras
+from tensorflow.keras import layers
+def get_model(max_tokens=20000, hidden_dim=16):
+	inputs = keras.Input(shape=(max_tokens,))
+	x = layers.Dense(hidden_dim, activation="relu")(inputs)
+	x = layers.Dropout(0.5)(x)
+	outputs = layers.Dense(1, activation="sigmoid")(x)
+	model = keras.Model(inputs, outputs)
+	model.compile(optimizer="rmsprop",
+				loss="binary_crossentropy",
+				metrics=["accuracy"])
+	return model
+
+# Задание 2 Модель мешка слов
+from tensorflow.keras.layers import TextVectorization
+text_vectorization = TextVectorization(
+	ngrams = 1,
+	max_tokens=20000,
+	output_mode="multi_hot",
+)
+text_only_train_ds = train_ds.map(lambda x, y: x)
+
+text_vectorization.adapt(text_only_train_ds)
+
+#-------------------------------------------#
+
+binary_1gram_train_ds = train_ds.map(
+	lambda x, y: (text_vectorization(x), y), 
+	num_parallel_calls=4)
+binary_1gram_val_ds = val_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+binary_1gram_test_ds = test_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+#-------------------------------------------#
+for inputs, targets in binary_1gram_train_ds:
+	print("inputs.shape:", inputs.shape)
+	print("inputs.dtype:", inputs.dtype)
+	print("targets.shape:", targets.shape)
+	print("targets.dtype:", targets.dtype)
+	print("targets[0]:", targets[0])
+	break
+
+#-------------------------------------------#
+model = get_model()
+model.summary()
+callbacks = [
+	keras.callbacks.ModelCheckpoint("binary_1gram.keras",
+								save_best_only=True)
+]
+model.fit(binary_1gram_train_ds.cache(),
+	validation_data=binary_1gram_val_ds.cache(),
+	epochs=5,
+	callbacks=callbacks)
+model = keras.models.load_model("binary_1gram.keras")
+print(f"Test acc: {model.evaluate(binary_1gram_test_ds)[1]:.3f}")
+
+#-------------------------------------------#
+
+
+#-------------------------------------------#
+# TF-IDF, output_mode
+
+text_vectorization = TextVectorization(
+	ngrams=1,  # Change this to 1 for 1-grams
+	max_tokens=20000,
+	output_mode="tf_idf"
+)
+text_vectorization.adapt(text_only_train_ds) 
+
+tfidf_1gram_train_ds = train_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+tfidf_1gram_val_ds = val_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+tfidf_1gram_test_ds = test_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+
+model = get_model()
+model.summary()
+callbacks = [
+		keras.callbacks.ModelCheckpoint("tfidf_1gram.keras",
+									save_best_only=True)
+]
+model.fit(tfidf_1gram_train_ds.cache(),
+		validation_data=tfidf_1gram_val_ds.cache(),
+		epochs=5,
+		callbacks=callbacks)
+model = keras.models.load_model("tfidf_1gram.keras")
+print(f"Test acc: {model.evaluate(tfidf_1gram_test_ds)[1]:.3f}")
+
+# Задание 3 Модель мешка слов для биграмм
+
+#-------------------------------------------#
+text_vectorization = TextVectorization(
+	ngrams=2,
+	max_tokens=20000,
+	output_mode="multi_hot"
+)
+#-------------------------------------------#
+text_only_train_ds = train_ds.map(lambda x, y: x)
+text_vectorization.adapt(text_only_train_ds)
+#-------------------------------------------#
+text_vectorization.adapt(text_only_train_ds)
+binary_2gram_train_ds = train_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+binary_2gram_val_ds = val_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+binary_2gram_test_ds = test_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+
+model = get_model()
+model.summary()
+callbacks = [
+	keras.callbacks.ModelCheckpoint("binary_2gram.keras",
+								save_best_only=True)
+]
+model.fit(binary_2gram_train_ds.cache(),
+		validation_data=binary_2gram_val_ds.cache(),
+		epochs=5,
+		callbacks=callbacks)
+model = keras.models.load_model("binary_2gram.keras")
+print(f"Test acc: {model.evaluate(binary_2gram_test_ds)[1]:.3f}")
+
+# tf_idf
+#-------------------------------------------#
+text_vectorization = TextVectorization(
+    ngrams=2,
+    max_tokens=20000,
+    output_mode="tf_idf"
+)
+#-------------------------------------------#
+text_only_train_ds = train_ds.map(lambda x, y: x)
+text_vectorization.adapt(text_only_train_ds)
+#-------------------------------------------#
+tfidf_2gram_train_ds = train_ds.map(
+    lambda x, y: (text_vectorization(x), y),
+    num_parallel_calls=4)
+tfidf_2gram_val_ds = val_ds.map(
+    lambda x, y: (text_vectorization(x), y),
+    num_parallel_calls=4)
+tfidf_2gram_test_ds = test_ds.map(
+    lambda x, y: (text_vectorization(x), y),
+    num_parallel_calls=4)
+
+model = get_model()
+model.summary()
+callbacks = [
+    keras.callbacks.ModelCheckpoint("tfidf_2gram.keras",
+                                    save_best_only=True)
+]
+model.fit(tfidf_2gram_train_ds.cache(),
+          validation_data=tfidf_2gram_val_ds.cache(),
+          epochs=5,
+          callbacks=callbacks)
+model = keras.models.load_model("tfidf_2gram.keras")
+print(f"Test acc: {model.evaluate(tfidf_2gram_test_ds)[1]:.3f}")
+
+# Задание 4: Использование TF-IDF для более точного представления текста
+def tfidf(term, document, dataset):
+	term_freq = document.count(term)
+	doc_freq = math.log(sum(doc.count(term) for doc in dataset) + 1)
+	return term_freq / doc_freq
+text_vectorization = TextVectorization(
+	ngrams=2,
+	max_tokens=20000,
+	output_mode="tf_idf"
+)
+
+#вызов adapt() обеспечит учет веса TF_IDF в дополнение к словарю
+text_vectorization.adapt(text_only_train_ds) 
+
+tfidf_2gram_train_ds = train_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+tfidf_2gram_val_ds = val_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+tfidf_2gram_test_ds = test_ds.map(
+	lambda x, y: (text_vectorization(x), y),
+	num_parallel_calls=4)
+
+model = get_model()
+model.summary()
+callbacks = [
+		keras.callbacks.ModelCheckpoint("tfidf_2gram.keras",
+									save_best_only=True)
+]
+model.fit(tfidf_2gram_train_ds.cache(),
+		validation_data=tfidf_2gram_val_ds.cache(),
+		epochs=5,
+		callbacks=callbacks)
+model = keras.models.load_model("tfidf_2gram.keras")
+print(f"Test acc: {model.evaluate(tfidf_2gram_test_ds)[1]:.3f}")
+
+#один входной образец должен быть строкой:
+inputs = keras.Input(shape=(1,), dtype="string")
+#выполнить предварительную обработку текста:
+processed_inputs = text_vectorization(inputs)
+#добавить уже обученную модель
+outputs = model(processed_inputs)
+#создать экземпляр модели
+inference_model = keras.Model(inputs, outputs)
+
+import tensorflow as tf
+raw_text_data = tf.convert_to_tensor([
+	["That was an excellent movie, I liked it a lot."],
+])
+predictions = inference_model(raw_text_data)
+print(f"{float(predictions[0] * 100):.2f} percent positive")
+
+# Задание 6: Пример модели с GRU
+inputs = keras.Input(shape = (None,), dtype="int64")
+embedded = layers.Embedding(input_dim=max_tokens, output_dim=256)(inputs)
+x = layers.Bidirectional(layers.LSTM(32))(embedded)
+x = layers.Dropout(0.5)(x)
+outputs = layers.Dense(1, activation="sigmoid")(x)
+model = keras.Model(inputs, outputs)
+model.compile(optimizer="rmsprop",
+			loss="binary_crossentropy",
+			metrics=["accuracy"])
+model.summary()
+
+callbacks = [
+	keras.callbacks.ModelCheckpoint("embeddings_bidir_gru.keras", 
+								save_best_only=True)
+]
+model.fit(int_train_ds, validation_data=int_val_ds, epochs=4, callbacks=callbacks)
+model = keras.models.load_model("embeddings_bidir_gru.keras")
+print(f"Test acc: {model.evaluate(int_test_ds)[1]:.3f}")
+
+inputs = keras.Input(shape = (None,), dtype="int64")
+embedded = layers.Embedding(
+	input_dim=max_tokens, output_dim=256, mask_zero=True)(inputs)
+x = layers.Bidirectional(layers.LSTM(32))(embedded)
+x = layers.Dropout(0.5)(x)
+outputs = layers.Dense(1, activation="sigmoid")(x)
+model = keras.Model(inputs, outputs)
+model.compile(optimizer="rmsprop",
+			loss="binary_crossentropy",
+			metrics=["accuracy"])
+model.summary()
+
+callbacks = [
+	keras.callbacks.ModelCheckpoint("embeddings_bidir_gru.keras", 
+								save_best_only=True)
+]
+model.fit(int_train_ds, validation_data=int_val_ds, epochs=4, callbacks=callbacks)
+model = keras.models.load_model("embeddings_bidir_gru.keras")
+print(f"Test acc: {model.evaluate(int_test_ds)[1]:.3f}")
+
+# Задание 7. Модель Transformer без позиционного кодирования
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+class TransformerEncoder(layers.Layer):
+	def __init__(self, embed_dim, dense_dim, num_heads, **kwargs):
+		super().__init__(**kwargs)
+		self.embed_dim = embed_dim #размер входного вектора токенов
+		self.dense_dim = dense_dim #размер внутреннего слоя полной связи
+		self.num_heads = num_heads #количество "голов внимания"
+		self.attention = layers.MultiHeadAttention(
+			num_heads=num_heads, key_dim=embed_dim)
+		self.dense_proj = keras.Sequential(
+			[layers.Dense(dense_dim, activation="relu"),
+			layers.Dense(embed_dim),])
+		self.layernorm_1 = layers.LayerNormalization()
+		self.layernorm_2 = layers.LayerNormalization()
+	def call(self, inputs, mask=None): #вычисления выполняются в методе call
+		if mask is not None:
+			mask = mask[:, tf.newaxis, :]
+		attention_output = self.attention(
+			inputs, inputs, attention_mask=mask)
+		proj_input = self.layernorm_1(inputs + attention_output)
+		proj_output = self.dense_proj(proj_input)
+		return self.layernorm_2(proj_input + proj_output)
+	def get_config(self): #серийность, чтобы получить возможность сохранять модель
+		config = super().get_config()
+		config.update({
+			"embed_dim": self.embed_dim,
+			"num_heads": self.num_heads,
+			"dense_dim": self.dense_dim,
+		})
+		return config
+vocab_size = 20000
+embed_dim = 256
+num_heads = 2
+dense_dim = 32
+
+inputs = keras.Input(shape=(None,), dtype="int64")
+x = layers.Embedding(vocab_size, embed_dim)(inputs)
+x = TransformerEncoder(embed_dim, dense_dim, num_heads)(x)
+x = layers.GlobalMaxPooling1D()(x)
+x = layers.Dropout(0.5)(x)
+outputs = layers.Dense(1, activation="sigmoid")(x)
+model = keras.Model(inputs, outputs)
+model.compile(optimizer="rmsprop",
+			loss="binary_crossentropy",
+			metrics=["accuracy"])
+model.summary()
+
+callbacks = [
+	keras.callbacks.ModelCheckpoint("transformer_encoder.keras",
+	save_best_only=True)
+]
+model.fit(int_train_ds, validation_data=int_val_ds, epochs=6, callbacks=callbacks)
+model = keras.models.load_model(
+	"transformer_encoder.keras",
+	custom_objects={"TransformerEncoder": TransformerEncoder})
+print(f"Test acc: {model.evaluate(int_test_ds)[1]:.3f}")
+
+# 8 Задание, Transformer с позиционным кодированием
+class PositionalEmbedding(layers.Layer):
+	def __init__(self, sequence_length, input_dim, output_dim, **kwargs):
+		super().__init__(**kwargs)
+	#подготовим один слой Embedding для обработки индексов токенов
+		self.token_embeddings = layers.Embedding(
+		input_dim=input_dim, output_dim=output_dim)
+	#второй слой Embedding - для обработки позиций токенов
+		self.position_embeddings = layers.Embedding(
+		input_dim=sequence_length, output_dim=output_dim)
+		self.sequence_length = sequence_length
+		self.input_dim = input_dim
+		self.output_dim = output_dim
+	def call(self, inputs):
+		length = tf.shape(inputs)[-1]
+		positions = tf.range(start=0, limit=length, delta=1)
+		embedded_tokens = self.token_embeddings(inputs)
+		embedded_positions = self.position_embeddings(positions)
+		#затем два вектора представлений объединяются:
+		return embedded_tokens + embedded_positions
+		#Так же, как слой Embedding, этот слой должен уметь генерировать маску, 			чтобы дать возможность игнорировать дополнение входных данных нулями. 		Фреймворк автоматически вызывает метод calculate_mask, и полученная 				маска будет передана следующему слою:
+	def compute_mask(self, inputs, mask=None):
+		return inputs != 0
+	#Cоздадим серийность, чтобы получить возможность сохранить модель:
+	def get_config(self):
+		config = super().get_config()
+		config.update({
+			"output_dim": self.output_dim,
+			"sequence_length": self.sequence_length,
+			"input_dim": self.input_dim,
+		})
+		return config
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+vocab_size = 20000
+sequence_length = 600
+embed_dim = 256
+num_heads = 2
+dense_dim = 32
+inputs = keras.Input(shape=(None,), dtype="int64")
+x = PositionalEmbedding(sequence_length, vocab_size, embed_dim)(inputs)
+x = TransformerEncoder(embed_dim, dense_dim, num_heads)(x)
+x = layers.GlobalMaxPooling1D()(x)
+x = layers.Dropout(0.5)(x)
+outputs = layers.Dense(1, activation = "sigmoid")(x)
+model = keras.Model(inputs, outputs)
+model.compile(optimizer="rmsprop",
+			loss="binary_crossentropy",
+			metrics=["accuracy"])
+model.summary()
+
+callbacks = [
+	keras.callbacks.ModelCheckpoint("full_transformer_encoder.keras",
+	save_best_only=True)
+]
+model.fit(int_train_ds, validation_data=int_val_ds, epochs=4, callbacks=callbacks)
+model = keras.models.load_model(
+    "full_transformer_encoder.keras",
+    custom_objects={"TransformerEncoder": TransformerEncoder,
+                    "PositionalEmbedding": PositionalEmbedding}
+)
+print(f"Test acc: {model.evaluate(int_test_ds)[1]:.3f}")
+
