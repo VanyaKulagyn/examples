@@ -1,0 +1,99 @@
+import math
+
+
+class Vertex:
+    def __init__(self):
+        self._links = []
+
+    @property
+    def links(self):
+        return self._links
+
+
+class Link:
+    def __init__(self, v1, v2):
+        self._v1 = v1
+        self._v2 = v2
+        self._dist = 1
+
+    @property
+    def v1(self):
+        return self._v1
+
+    @property
+    def v2(self):
+        return self._v2
+
+    @property
+    def dist(self):
+        return self._dist
+
+    @dist.setter
+    def dist(self, value):
+        self._dist = value
+
+    def __hash__(self):
+        return hash(tuple(sorted((hash(self.v1), hash(self.v2)))))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __iter__(self):
+        for i in (self.v1, self.v2):
+            yield i
+
+
+class LinkedGraph:
+    def __init__(self):
+        self._links = []
+        self._vertex = []
+
+    def add_vertex(self, v):
+        if v not in self._vertex:
+            self._vertex.append(v)
+
+    def add_link(self, link):
+        if link not in self._links:
+            self._links.append(link)
+            if link.v1 not in self._vertex:
+                self._vertex.append(link.v1)
+            if link.v2 not in self._vertex:
+                self._vertex.append(link.v2)
+
+    def find_path(self, start_v, stop_v):
+        d = {k: [math.inf, [[], []]] for k in self._vertex}
+        d[start_v] = [0, [[], []]]
+        v = start_v
+        lst_sup = self._vertex
+        while True:
+            for link in self._links:
+                if v in link:
+                    vertex = link.v1 if v != link.v1 else link.v2
+                    if d[vertex][0] > d[v][0] + link.dist:
+                        d[vertex][0] = d[v][0] + link.dist
+                        d[vertex][1][1] = d[v][1][1] + [link]
+                        d[vertex][1][0] = list(dict.fromkeys(d[v][1][0] + [v] + [vertex]))
+            lst_sup.remove(v)
+            if not lst_sup:
+                break
+            v = min([(x, d[x][0]) for x in lst_sup], key=lambda x: x[1])[0]
+
+        return tuple(d[stop_v][1])
+
+
+class Station(Vertex):
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+
+    def __str__(self):
+        return f'{self.name}'
+
+    def __repr__(self):
+        return f'{self.name}'
+
+
+class LinkMetro(Link):
+    def __init__(self, v1, v2, dist):
+        super().__init__(v1, v2)
+        self.dist = dist
